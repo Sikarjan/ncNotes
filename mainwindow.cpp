@@ -12,7 +12,6 @@ MainWindow::MainWindow(QWidget *parent)
     changedNotes = 0;
 
     connect(ui->editor, SIGNAL(textChanged()), this, SLOT(noteChanged()));
-    connect(ui->noteView, SIGNAL(objectNameChanged(QString)), this, SLOT(renameNote(QString)));
     connect(setDiag, SIGNAL(newFont(QFont)), ui->editor, SLOT(setCurrentFont(QFont)));
 
     ui->editor->setFontPointSize(15);
@@ -20,6 +19,9 @@ MainWindow::MainWindow(QWidget *parent)
     // for development only
     dir = QUrl("/Users/flo/Documents/Cloud/Notes");
     addInstance(dir);
+
+    // Context menu for TreeView
+    ui->noteView->addAction(tr("&Rename"), this, SLOT(renameNote()));
 }
 
 MainWindow::~MainWindow()
@@ -97,15 +99,32 @@ void MainWindow::addNote()
         }
         model->insert(noteName, path);
         QModelIndex index = model->index(model->rowCount()-1,0);
+        qDebug() << index;
         emit model->dataChanged(index,index);
         changedNotes++;
     }
 }
 
-void MainWindow::renameNote(QString name)
+void MainWindow::renameNote()
 {
-    qDebug() << "start renaming";
     QModelIndex index = ui->noteView->currentIndex();
+    if(!index.isValid()){
+        return;
+    }
+
+    QString oldName = model->data(index).toString();
+    bool ok;
+    QString name = QInputDialog::getText(this,
+        tr("New Note Name"),
+        tr("New Name"), QLineEdit::Normal,
+        oldName,
+        &ok
+    );
+
+    if (!ok || name.isEmpty()){
+        return;
+    }
+
     QStringList tNote = model->getData(index);
     QString newPath = dir.path()+"/"+name+".txt";
 

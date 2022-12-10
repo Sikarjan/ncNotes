@@ -17,6 +17,7 @@
 #include <QItemSelectionModel>
 #include <QCloseEvent>
 #include <QSettings>
+#include <QMenu>
 
 #include "notemodel.h"
 #include "settingdialog.h"
@@ -44,7 +45,7 @@ private slots:
     void saveNote();
     void saveAll(bool exit = false);
     void addNote();
-    void renameNote(QString name);
+    void renameNote();
     void showSettings();
 
 private:
