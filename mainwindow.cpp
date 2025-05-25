@@ -22,6 +22,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // Context menu for TreeView
     ui->noteView->addAction(tr("&Rename"), this, SLOT(renameNote()));
+    ui->noteView->addAction(tr("&Delete"), this, SLOT(deleteNote()));
 }
 
 MainWindow::~MainWindow()
@@ -88,7 +89,7 @@ void MainWindow::addNote()
          tr("New Note"),
          &ok);
     if(ok && !noteName.isEmpty()){
-        QString path = dir.path()+"/"+noteName+".txt";
+        QString path = dir.path()+"/"+noteName+".md";
         QFile file(path);
         if(file.open(QIODevice::ReadOnly|QIODevice::Text)){
             QMessageBox msg;
@@ -126,7 +127,7 @@ void MainWindow::renameNote()
     }
 
     QStringList tNote = model->getData(index);
-    QString newPath = dir.path()+"/"+name+".txt";
+    QString newPath = dir.path()+"/"+name+".md";
 
     QFile file;
     if(file.rename(tNote[2], newPath)){
@@ -136,6 +137,30 @@ void MainWindow::renameNote()
         msgBox.setIcon(QMessageBox::Critical);
         msgBox.setText(tr("Renaming faild!"));
         msgBox.exec();
+    }
+}
+
+void MainWindow::deleteNote() {
+    QModelIndex index = ui->noteView->currentIndex();
+    if(!index.isValid()){
+        return;
+    }
+
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Move to trash");
+    msgBox.setText(tr("Do you want to move this note to trash?"));
+    msgBox.setStandardButtons(QMessageBox::Yes);
+    msgBox.addButton(QMessageBox::No);
+    msgBox.setDefaultButton(QMessageBox::No);
+    if(msgBox.exec() == QMessageBox::No){
+      return;
+    }
+
+    QStringList tNote = model->getData(index);
+    QFile file(tNote[2]);
+    if(file.moveToTrash()){
+        qDebug() << index.row();
+        qDebug() << model->removeRow(index.row(), index);
     }
 }
 
@@ -193,8 +218,10 @@ void MainWindow::updateEditor(const QItemSelection& selection, const QItemSelect
 void MainWindow::addInstance(QUrl url)
 {
     QDir mDir = url.path();
+    QStringList nameFilters;
+    nameFilters << "*.txt" << "*.md";
 
-    QFileInfoList notes = mDir.entryInfoList(QStringList() << "*.txt", QDir::Files, QDir::Name);
+    QFileInfoList notes = mDir.entryInfoList(nameFilters, QDir::Files, QDir::Name);
 
     for(int i=0;i<notes.size();i++){
         QString tmpNote;

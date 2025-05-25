@@ -46,6 +46,7 @@ private slots:
     void saveAll(bool exit = false);
     void addNote();
     void renameNote();
+    void deleteNote();
     void showSettings();
 
 private:
