@@ -11,14 +11,17 @@ MainWindow::MainWindow(QWidget *parent)
     setDiag = new SettingDialog(this);
     changedNotes = 0;
 
-    connect(ui->editor, SIGNAL(textChanged()), this, SLOT(noteChanged()));
-    connect(setDiag, SIGNAL(newFont(QFont)), ui->editor, SLOT(setCurrentFont(QFont)));
-
     ui->editor->setFontPointSize(15);
 
     // for development only
     dir = QUrl("/Users/flo/Documents/Cloud/Notes");
     addInstance(dir);
+    watcher.addPath(dir.toString());
+    previousFileState = scanDirectory(dir.toString());
+
+    connect(&watcher, SIGNAL(directoryChanged(QString)), this, SLOT(fileChanged(QString)));
+    connect(ui->editor, SIGNAL(textChanged()), this, SLOT(noteChanged()));
+    connect(setDiag, SIGNAL(newFont(QFont)), ui->editor, SLOT(setCurrentFont(QFont)));
 
     // Context menu for TreeView
     ui->noteView->addAction(tr("&Rename"), this, SLOT(renameNote()));
@@ -100,7 +103,8 @@ void MainWindow::addNote()
         }
         model->insert(noteName, path);
         QModelIndex index = model->index(model->rowCount()-1,0);
-        qDebug() << index;
+        ui->noteView->setCurrentIndex(index);
+        ui->editor->setFocus();
         emit model->dataChanged(index,index);
         changedNotes++;
     }
@@ -160,7 +164,7 @@ void MainWindow::deleteNote() {
     QFile file(tNote[2]);
     if(file.moveToTrash()){
         qDebug() << index.row();
-        qDebug() << model->removeRow(index.row(), index);
+        qDebug() << model->removeRow(index.row());
     }
 }
 
@@ -168,6 +172,12 @@ void MainWindow::showSettings()
 {
     setDiag->cFont = ui->editor->currentFont();
     setDiag->show();
+}
+
+void MainWindow::fileChanged(const QString& file)
+{
+    qDebug() << "File Change detected" << file;
+    detectChanges(file);
 }
 
 void MainWindow::on_actionAdd_Instance_triggered()
@@ -246,6 +256,53 @@ void MainWindow::addInstance(QUrl url)
             SLOT(updateEditor(QItemSelection,QItemSelection)));
 }
 
+void MainWindow::detectChanges(const QString &path)
+{
+    QMap<QString, QDateTime> currentState = scanDirectory(path);
+    // Vergleiche vorher/nachher
+    for (const QString &file : currentState.keys()) {
+        // New file added externally
+        if (!previousFileState.contains(file)) {
+            QString tmpNote;
+            QFileInfo fileInfo(path+"/"+file);
+            QFile note(fileInfo.filePath());
+
+            if(note.open(QIODevice::ReadOnly)){
+                QTextStream in(&note);
+                tmpNote = in.readAll();
+            }else{
+                tmpNote = (tr("Error reading file."));
+            }
+            note.close();
+
+            model->append(fileInfo.baseName(),tmpNote, fileInfo.filePath());
+            QModelIndex index = model->index(model->rowCount()-1,0);
+            emit model->dataChanged(index,index);
+        } else if (previousFileState[file] != currentState[file]) {
+            qDebug() << "Datei geändert:" << file;
+        }
+    }
+
+    for (const QString &file : previousFileState.keys()) {
+        if (!currentState.contains(file)) {
+            qDebug() << "Datei gelöscht:" << file;
+        }
+    }
+
+    // Zustand aktualisieren
+    previousFileState = currentState;
+}
+
+QMap<QString, QDateTime> MainWindow::scanDirectory(const QString &path)
+{
+    QMap<QString, QDateTime> state;
+    QDir dir(path);
+    for (const QFileInfo &file : dir.entryInfoList(QDir::Files)) {
+        state[file.fileName()] = file.lastModified();
+    }
+    return state;
+}
+
 
 void MainWindow::on_actionQuit_triggered()
 {
@@ -270,6 +327,7 @@ void MainWindow::saveNote(){
     QModelIndex index = ui->noteView->currentIndex();
     QStringList tmpNote = model->getData(index);
 
+    watcher.blockSignals(true);
     QFile file(tmpNote[2]);
     if(!file.open(QIODevice::WriteOnly|QIODevice::Text)){
         qDebug() << "error saving" << tmpNote[2];
@@ -279,6 +337,11 @@ void MainWindow::saveNote(){
     QTextStream out(&file);
     out << ui->editor->toPlainText() << "\n";
     file.close();
+
+    QFileInfo info(file);
+    previousFileState[info.fileName()] = info.lastModified();
+
+    watcher.blockSignals(false);
 
     model->noteChanged(index.row(), false);
     emit model->dataChanged(index,index);

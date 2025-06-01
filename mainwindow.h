@@ -18,6 +18,7 @@
 #include <QCloseEvent>
 #include <QSettings>
 #include <QMenu>
+#include <QFileSystemWatcher>
 
 #include "notemodel.h"
 #include "settingdialog.h"
@@ -48,15 +49,20 @@ private slots:
     void renameNote();
     void deleteNote();
     void showSettings();
+    void fileChanged(const QString &file);
 
 private:
     Ui::MainWindow *ui;
     QUrl dir;
+    QFileSystemWatcher watcher;
     QList<QUrl> instancelList;
     NoteModel *model;
     int changedNotes;
     SettingDialog *setDiag;
+    QMap<QString, QDateTime> previousFileState;
 
     void addInstance(QUrl url);
+    void detectChanges(const QString& path);
+    QMap<QString, QDateTime> scanDirectory(const QString& path);
 };
 #endif // MAINWINDOW_H
