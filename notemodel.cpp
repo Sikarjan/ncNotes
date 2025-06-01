@@ -73,6 +73,19 @@ void NoteModel::insert(const QString &name, const QString &path)
     // missing sorting model by name
 }
 
+bool NoteModel::removeRows(int row, int count, const QModelIndex &parent)
+{
+    if (row < 0 || row + count > rowCount(parent))
+        return false;
+
+    beginRemoveRows(parent, row, row + count - 1);
+    for (int i = 0; i < count; ++i) {
+        mNotes.removeAt(row);
+    }
+    endRemoveRows();
+    return true;
+}
+
 bool NoteModel::hasChanged(const int &index)
 {
     QStringList tNote = mNotes.at(index);

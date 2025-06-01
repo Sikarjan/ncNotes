@@ -160,12 +160,14 @@ void MainWindow::deleteNote() {
       return;
     }
 
+    watcher.blockSignals(true);
     QStringList tNote = model->getData(index);
     QFile file(tNote[2]);
     if(file.moveToTrash()){
-        qDebug() << index.row();
-        qDebug() << model->removeRow(index.row());
+        model->removeRow(index.row());
     }
+    previousFileState.remove(file.fileName());
+    watcher.blockSignals(false);
 }
 
 void MainWindow::showSettings()
@@ -176,7 +178,7 @@ void MainWindow::showSettings()
 
 void MainWindow::fileChanged(const QString& file)
 {
-    qDebug() << "File Change detected" << file;
+    qDebug() << "File Change detected";
     detectChanges(file);
 }
 
@@ -284,8 +286,19 @@ void MainWindow::detectChanges(const QString &path)
     }
 
     for (const QString &file : previousFileState.keys()) {
-        if (!currentState.contains(file)) {
+        if (!currentState.contains(file)) { 
             qDebug() << "Datei gelöscht:" << file;
+            QMessageBox msgBox;
+            msgBox.setWindowTitle("Note deleted");
+            msgBox.setText(tr("Note ")+file+tr(" was removed. Do you want to keep it in the editor?"));
+            msgBox.setStandardButtons(QMessageBox::Yes);
+            msgBox.addButton(QMessageBox::No);
+            msgBox.setDefaultButton(QMessageBox::No);
+            if(msgBox.exec() == QMessageBox::Yes){
+                return;
+            }
+
+            // Need to detect which row the deleted note was and remove it from the model
         }
     }
 

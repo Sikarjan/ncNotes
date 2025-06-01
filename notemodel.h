@@ -18,6 +18,7 @@ public:
     bool setName(const QModelIndex &index, QString &name, QString &path);
     void append(const QString& name, const QString& note, const QString& path, const QString& hasChanged = "false");
     void insert(const QString& name, const QString& path);
+    bool removeRows(int row, int count, const QModelIndex &parent = QModelIndex()) override;
     bool hasChanged(const int &index);
     void noteChanged(const int &index, const bool &change);
 
