@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "./ui_mainwindow.h"
+#include "markdownhighlighter.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -11,7 +12,9 @@ MainWindow::MainWindow(QWidget *parent)
     setDiag = new SettingDialog(this);
     changedNotes = 0;
 
-    ui->editor->setFontPointSize(15);
+    ui->editor->setFont(QFont("Courier New", 13));
+
+    new MarkdownHighlighter(ui->editor->document());
 
     // for development only
     dir = QUrl("/Users/flo/Documents/Cloud/Notes");

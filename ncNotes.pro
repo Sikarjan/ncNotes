@@ -11,11 +11,13 @@ CONFIG += c++17
 SOURCES += \
     main.cpp \
     mainwindow.cpp \
+    markdownhighlighter.cpp \
     notemodel.cpp \
     settingdialog.cpp
 
 HEADERS += \
     mainwindow.h \
+    markdownhighlighter.h \
     notemodel.h \
     settingdialog.h
 
