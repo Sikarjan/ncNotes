@@ -19,12 +19,16 @@ MainWindow::MainWindow(QWidget *parent)
     // for development only
     dir = QUrl("/Users/flo/Documents/Cloud/Notes");
     addInstance(dir);
-    watcher.addPath(dir.toString());
+    watcher.addPath(dir.path());
     previousFileState = scanDirectory(dir.toString());
+    pollingTimer = new QTimer(this);
 
     connect(&watcher, SIGNAL(directoryChanged(QString)), this, SLOT(fileChanged(QString)));
+    connect(pollingTimer, &QTimer::timeout, this, &MainWindow::pollDirectoryChanges);
     connect(ui->editor, SIGNAL(textChanged()), this, SLOT(noteChanged()));
     connect(setDiag, SIGNAL(newFont(QFont)), ui->editor, SLOT(setCurrentFont(QFont)));
+
+    pollingTimer->start(5000);
 
     // Context menu for TreeView
     ui->noteView->addAction(tr("&Rename"), this, SLOT(renameNote()));
@@ -250,6 +254,7 @@ void MainWindow::addInstance(QUrl url)
             tmpNote = (tr("Error reading file."));
         }
         note.close();
+        fileLoadTimes[fileInfo.filePath()] = fileInfo.lastModified();
         model->append(fileInfo.baseName(),tmpNote, fileInfo.filePath());
     }
 
@@ -261,17 +266,20 @@ void MainWindow::addInstance(QUrl url)
             SLOT(updateEditor(QItemSelection,QItemSelection)));
 }
 
-void MainWindow::detectChanges(const QString &path)
+void MainWindow::detectChanges(const QString &path = "")
 {
-    QMap<QString, QDateTime> currentState = scanDirectory(path);
+    pollingTimer->stop();
+
+    QString actualPath = path.isEmpty() ? dir.path() : path;
+    QMap<QString, QDateTime> currentState = scanDirectory(actualPath);
     // Vergleiche vorher/nachher
     for (const QString &file : currentState.keys()) {
+        QString tmpNote;
+        QFileInfo fileInfo(path+"/"+file);
+        QFile note(fileInfo.filePath());
+
         // New file added externally
         if (!previousFileState.contains(file)) {
-            QString tmpNote;
-            QFileInfo fileInfo(path+"/"+file);
-            QFile note(fileInfo.filePath());
-
             if(note.open(QIODevice::ReadOnly)){
                 QTextStream in(&note);
                 tmpNote = in.readAll();
@@ -284,7 +292,14 @@ void MainWindow::detectChanges(const QString &path)
             QModelIndex index = model->index(model->rowCount()-1,0);
             emit model->dataChanged(index,index);
         } else if (previousFileState[file] != currentState[file]) {
-            qDebug() << "Datei geändert:" << file;
+            QMessageBox msgBox;
+            msgBox.setIcon(QMessageBox::Information);
+            msgBox.setText(tr("File changed externally"));
+            msgBox.setInformativeText(tr("The file '%1' was modified. Reload?").arg(file));
+            msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+            if (msgBox.exec() == QMessageBox::Yes) {
+                reloadNote(dir.path() + "/" + file);
+            }
         }
     }
 
@@ -292,13 +307,25 @@ void MainWindow::detectChanges(const QString &path)
         if (!currentState.contains(file)) { 
             qDebug() << "Datei gelöscht:" << file;
             QMessageBox msgBox;
-            msgBox.setWindowTitle("Note deleted");
+            msgBox.setWindowTitle(tr("Note deleted"));
             msgBox.setText(tr("Note ")+file+tr(" was removed. Do you want to keep it in the editor?"));
             msgBox.setStandardButtons(QMessageBox::Yes);
             msgBox.addButton(QMessageBox::No);
             msgBox.setDefaultButton(QMessageBox::No);
             if(msgBox.exec() == QMessageBox::Yes){
-                return;
+                // Modell-Eintrag finden und aktualisieren
+                for (int i = 0; i < model->rowCount(); i++) {
+                    QStringList noteData = model->getData(model->index(i, 0));
+                    if (noteData[2] == dir.path() + "/" + file) {
+                        model->removeRow(i);
+
+                        // Falls diese Notiz gerade im Editor angezeigt wird
+                        if (ui->noteView->currentIndex() == model->index(i, 0)) {
+                            ui->editor->setText("");
+                        }
+                        return;
+                    }
+                }
             }
 
             // Need to detect which row the deleted note was and remove it from the model
@@ -307,6 +334,8 @@ void MainWindow::detectChanges(const QString &path)
 
     // Zustand aktualisieren
     previousFileState = currentState;
+
+    pollingTimer->start(5000);
 }
 
 QMap<QString, QDateTime> MainWindow::scanDirectory(const QString &path)
@@ -319,6 +348,49 @@ QMap<QString, QDateTime> MainWindow::scanDirectory(const QString &path)
     return state;
 }
 
+void MainWindow::pollDirectoryChanges()
+{
+    QMap<QString, QDateTime> currentState = scanDirectory(dir.path());
+    if (currentState != previousFileState) {
+        detectChanges(dir.path());
+    }
+}
+
+void MainWindow::reloadNote(const QString &filePath)
+{
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qDebug() << "Error reloading file:" << filePath;
+        return;
+    }
+
+    QTextStream in(&file);
+    QString newContent = in.readAll();
+    file.close();
+
+    // Modell-Eintrag finden und aktualisieren
+    for (int i = 0; i < model->rowCount(); i++) {
+        QStringList noteData = model->getData(model->index(i, 0));
+        if (noteData[2] == filePath) {
+            model->setNote(model->index(i, 0), newContent);
+
+            // Falls diese Notiz gerade im Editor angezeigt wird
+            if (ui->noteView->currentIndex() == model->index(i, 0)) {
+                ui->editor->blockSignals(true);
+                ui->editor->setText(newContent);
+                ui->editor->blockSignals(false);
+            }
+
+            // Aktualisierte Modifikationszeit speichern
+            QFileInfo info(filePath);
+            fileLoadTimes[filePath] = info.lastModified();
+            previousFileState[info.fileName()] = info.lastModified();
+
+            emit model->dataChanged(model->index(i, 0), model->index(i, 0));
+            return;
+        }
+    }
+}
 
 void MainWindow::on_actionQuit_triggered()
 {
@@ -342,6 +414,21 @@ void MainWindow::noteChanged()
 void MainWindow::saveNote(){
     QModelIndex index = ui->noteView->currentIndex();
     QStringList tmpNote = model->getData(index);
+
+    // Check if file has changed in the directory
+    QFileInfo currentInfo(tmpNote[2]);
+    if (fileLoadTimes.contains(tmpNote[2]) &&
+        currentInfo.lastModified() > fileLoadTimes[tmpNote[2]]) {
+
+        QMessageBox msgBox;
+        msgBox.setIcon(QMessageBox::Warning);
+        msgBox.setText(tr("This note has been modified externally."));
+        msgBox.setInformativeText(tr("Do you want to overwrite the external changes?"));
+        msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+        if (msgBox.exec() == QMessageBox::No) {
+            return; // Speichern abbrechen
+        }
+    }
 
     watcher.blockSignals(true);
     QFile file(tmpNote[2]);

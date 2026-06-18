@@ -19,6 +19,7 @@
 #include <QSettings>
 #include <QMenu>
 #include <QFileSystemWatcher>
+#include <QTimer>
 
 #include "notemodel.h"
 #include "settingdialog.h"
@@ -60,9 +61,13 @@ private:
     int changedNotes;
     SettingDialog *setDiag;
     QMap<QString, QDateTime> previousFileState;
+    QMap<QString, QDateTime> fileLoadTimes;
+    QMap<QString, QDateTime> scanDirectory(const QString& path);
 
     void addInstance(QUrl url);
     void detectChanges(const QString& path);
-    QMap<QString, QDateTime> scanDirectory(const QString& path);
+    QTimer *pollingTimer;
+    void pollDirectoryChanges();
+    void reloadNote(const QString &filePath);
 };
 #endif // MAINWINDOW_H
