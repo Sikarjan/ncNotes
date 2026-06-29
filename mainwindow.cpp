@@ -185,7 +185,6 @@ void MainWindow::showSettings()
 
 void MainWindow::fileChanged(const QString& file)
 {
-    qDebug() << "File Change detected";
     detectChanges(file);
 }
 
@@ -417,8 +416,8 @@ void MainWindow::saveNote(){
 
     // Check if file has changed in the directory
     QFileInfo currentInfo(tmpNote[2]);
-    if (fileLoadTimes.contains(tmpNote[2]) &&
-        currentInfo.lastModified() > fileLoadTimes[tmpNote[2]]) {
+
+    if (fileLoadTimes.contains(tmpNote[2]) && currentInfo.lastModified() > fileLoadTimes[tmpNote[2]]) {
 
         QMessageBox msgBox;
         msgBox.setIcon(QMessageBox::Warning);
@@ -443,6 +442,7 @@ void MainWindow::saveNote(){
 
     QFileInfo info(file);
     previousFileState[info.fileName()] = info.lastModified();
+    fileLoadTimes[tmpNote[2]] = info.lastModified();
 
     watcher.blockSignals(false);
 
