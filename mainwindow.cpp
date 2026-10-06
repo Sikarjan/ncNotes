@@ -268,6 +268,7 @@ void MainWindow::addInstance(QUrl url)
 void MainWindow::detectChanges(const QString &path = "")
 {
     pollingTimer->stop();
+    watcher.blockSignals(true);
 
     QString actualPath = path.isEmpty() ? dir.path() : path;
     QMap<QString, QDateTime> currentState = scanDirectory(actualPath);
@@ -335,6 +336,7 @@ void MainWindow::detectChanges(const QString &path = "")
     previousFileState = currentState;
 
     pollingTimer->start(5000);
+    watcher.blockSignals(false);
 }
 
 QMap<QString, QDateTime> MainWindow::scanDirectory(const QString &path)
@@ -432,8 +434,16 @@ void MainWindow::saveNote(){
     watcher.blockSignals(true);
     QFile file(tmpNote[2]);
     if(!file.open(QIODevice::WriteOnly|QIODevice::Text)){
-        qDebug() << "error saving" << tmpNote[2];
-        return;
+        qDebug() << "error saving cannot open file: " << tmpNote[2];
+
+        QMessageBox msgBox;
+        msgBox.setIcon(QMessageBox::Warning);
+        msgBox.setText(tr("File is locked."));
+        msgBox.setInformativeText(tr("The Note is blocked and cannot be saved."));
+        msgBox.setStandardButtons(QMessageBox::Ok);
+        if (msgBox.exec() == QMessageBox::Ok) {
+            return; // Speichern abbrechen
+        }
     }
 
     QTextStream out(&file);
